@@ -3,6 +3,8 @@ package main
 import (
 	. "../application"
 	"fmt"
+	"io"
+	"net/http"
 	"testing"
 	"time"
 )
@@ -45,6 +47,31 @@ func testCalculationValue(p ExplicitPromise) {
 		x = x + i
 	}
 	p.PromiseValue(x)
+}
+
+func getRequest(website string) ImplicitPromise {
+	return MakeImplicitPromise(func() SharedState {
+		resp, error := http.Get(website)
+		if error == nil {
+			return SharedState{resp, Kept}
+		} else{
+			return SharedState{error, Broken}
+		}
+
+	})
+}
+
+func readIO(resp *http.Response) ImplicitPromise {
+	return MakeImplicitPromise(func() SharedState {
+		bytes, err := io.ReadAll(resp.Body)
+		if err == nil {
+			resp.Body.Close()
+			return SharedState{bytes, Kept}
+		} else{
+			return SharedState{err, Broken}
+		}
+
+	})
 }
 
 //_______________________________________________________________________________________________
@@ -99,5 +126,74 @@ func TestExplicitWithPromisingInThread(t *testing.T) {
 	printState(x)
 	if x.Value != 45 {
 		t.Errorf("FAILED - Wrong value %d was received but should have been 45", x.Value)
+	}
+}
+
+//Testing Implicit Version
+//Create a HTTP Get request and print the header
+func TestExampleWebsite(t *testing.T) {
+
+	fmt.Print("Sending a HTTP Get Request to a website \n")
+	implicitPromise := getRequest("https://www.golem.de/")
+	fmt.Print("Get Result \n")
+	future := implicitPromise.GetFuture()
+	result := future.GetValue()
+	switch result.State {
+	case Kept:
+		request := result.Value.(*http.Response)
+		fmt.Printf("Request Header: %s",request.Header)
+	case Broken:
+		t.Errorf("Promise was broken, the calculation failed with an error: %s \n",result.Value)
+		fmt.Print(result.Value)
+	default:
+		t.Failed()
+	}
+}
+
+//Failed Version
+func TestExampleWebsiteFailed(t *testing.T) {
+
+	fmt.Print("Sending a HTTP Get Request to a website \n")
+	implicitPromise := getRequest("https://www.golemFailed12312312123.de/")
+	fmt.Print("Get Result \n")
+	future := implicitPromise.GetFuture()
+	result := future.GetValue()
+	switch result.State {
+	case Kept:
+		t.Error("Promise was kept, but that shouldn't be the case")
+	case Broken:
+		fmt.Printf("Expected: Promise was broken, the calculation failed with an error: %s \n",result.Value)
+		fmt.Print(result.Value)
+	default:
+		t.Failed()
+	}
+}
+
+//combined futures and promises
+func TestWebAndIO(t *testing.T) {
+	fmt.Print("Sending a HTTP Get Request to a website \n")
+	HTTPPromise := getRequest("https://www.youtube.com/")
+	fmt.Print("Get Result \n")
+	future := HTTPPromise.GetFuture()
+	result := future.GetValue()
+	switch result.State {
+	case Kept:
+		fmt.Print("Promise was kept therefore processing the response will be processed\n")
+		request := result.Value.(*http.Response)
+		ioPromise := readIO(request)
+		sharedStateIO := ioPromise.GetFuture().GetValue()
+		switch sharedStateIO.State {
+		case Kept:
+			fmt.Print(sharedStateIO.Value)
+		case Broken:
+			t.Errorf("IOPromise was broken, the calculation failed with an error: %s \n",sharedStateIO.Value)
+		}
+		fmt.Printf("Request Header: %s",request.Header)
+	case Broken:
+		fmt.Print(result.Value)
+		t.Errorf("HTTPPromise was broken, the calculation failed with an error: %s \n",result.Value)
+	default:
+		t.Failed()
+		break
 	}
 }

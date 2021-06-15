@@ -1,19 +1,11 @@
+// Github: https://github.com/FST0524/GoFuturesAndPromises
+
 package future
 
 import (
 	"fmt"
 	"time"
 )
-
-// Tasks
-//_______________________________________________________________________________________________
-
-/*
- -Task-: Schritt: Grundlegende Implementierung (Done)
- -Task-: Schritt: Beispiel schreiben, um Funktionalität zu testen (Done)
- -ToDo-: Schritt: Neue Funktionalitäten hinzufügen und Optimieren
- ToDo: Schritt: " testen
-*/
 
 // Types
 //_______________________________________________________________________________________________
@@ -41,11 +33,10 @@ func (e PromiseError) Error() string {
 //-Solution-: Limit buffer e.g. unbuffered
 // _______________________________________________________________________________________________
 
-
-//Create Future as placeholder object the value will be eventually available
+//Create a Future as a placeholder object for the value that will be eventually available
 type Future chan FutureResult
 
-//Retrieve the value of the future
+//GetResult() - Retrieve the value of the future
 //Properties: Blocking
 func (future Future) GetResult() (interface{},error) {
 	futResult := <-future
@@ -60,8 +51,9 @@ func (future Future) GetResult() (interface{},error) {
 // Future - Possible Extensions
 // _______________________________________________________________________________________________
 
-//Retrieve the value of the future with a specific duration until a timeout occures
-//Properties: Blocking (until timeout occures)
+//Retrieve the value of the future with a timeout
+//If the value can't be received the function will return a TimeoutError
+//Properties: Partially Blocking (until timeout occures)
 func (future Future) GetResultWithTimeout(seconds int) (interface{},error)  {
 	select {
 	case futResult := <-future:
@@ -75,7 +67,7 @@ func (future Future) GetResultWithTimeout(seconds int) (interface{},error)  {
 	}
 }
 
-//If the calculation failed execute a given function
+//If the calculation fails execute a given function
 //Properties: Blocking
 //Reason: Try to capsulate most of the functionality to make it easier to use
 func (future Future) OnPromiseBroken(execFunc func()) {
@@ -96,6 +88,7 @@ func (future Future) OnPromiseKept(execFunc func(i interface{})) {
 }
 
 //Process the result with a given function
+//If the value couldn't be received then execute errorFunction
 //Properties: Blocking
 //Reason: Try to capsulate most of the functionality to make it easier to use
 func (future Future) OnResolvedWithTimeout(errorFunc func(),successFunc func(i interface{}),seconds int) {
@@ -103,7 +96,6 @@ func (future Future) OnResolvedWithTimeout(errorFunc func(),successFunc func(i i
 	if err == nil {
 		successFunc(res)
 	} else {
-		err.Error()
 		errorFunc()
 	}
 }
@@ -116,7 +108,7 @@ func (future Future) OnResolvedWithTimeout(errorFunc func(),successFunc func(i i
 // -Task-: 4 Promise hat eine Funktion setValue, um den Wert des Futures zu setzen, dadurch wird er automatisch in den Zustand completed gesetzt und ist erfüllt
 //_______________________________________________________________________________________________
 
-// Keep every promise bound to their own promise
+// Keep every promise bound to their own future
 type Promise struct {
 	LinkedFuture Future
 }
@@ -128,11 +120,10 @@ type ImplicitPromise Promise
 
 // Info: Promise in this case is just the calculation and processing for the value
 // Generates a new Promise while directly starting the calculation
-// (1),(2) will be solved
-// Input: A task which returns a SharedState
+// Input: A task which returns a FutureResult
 // Output: Return the created Promise
 // Effect: the calculation starts immediately
-// Implicit means that the calculation will be starting without a trigger
+// Implicit in this case means the calculation will start without a specific trigger
 func MakeImplicitPromise(calcFunction func() FutureResult) ImplicitPromise {
 	//Closure used here
 	//It's possible to make the func easier with directly returning the future
@@ -151,38 +142,38 @@ func MakeImplicitPromise(calcFunction func() FutureResult) ImplicitPromise {
 	return promise
 }
 
-// Get Future (ReturnValue) from Promise(Base)
-// Effects: Will return the future for the promise
+// Get the associated Future to a ImplicitPromise
 func (promise ImplicitPromise) GetFuture() Future {
 	return promise.LinkedFuture
 }
 
-// Promise - Functionality is similar to C++ Boost Future and Promise
+// Promise - Functionality similar to C++ Boost Future and Promise
 //_______________________________________________________________________________________________
 
 type ExplicitPromise Promise
 
-// Info:
-// Generates a new Future (nothing else)
-// Explicit means that the calculation will not be started. A trigger or a promise. SetValue is needed.
-// In Go this implementation may not be need because the same effect could be easiyl achieved with only channels
+// Creates the association between the ExplicitPromise and the Future
+// Explicit means that the calculation will not be started.
+// A trigger is needed. The corresponding trigger is the function PromiseValue
+// In Go this implementation may not be need because the same effect could be easily achieved with only channels
 func MakeExplicitPromise() ExplicitPromise {
 	promise := ExplicitPromise{LinkedFuture: make(Future)}
 	return promise
 }
 
 /*
-Reason: On Promise(Base) get the Future to set the value
-Effects: Will set the status to completed and the value can be received through Future.getValue()
--Task- Potential Problem: What happened if the function as well as implizit executes at the same time => Deadlock not on another thread
--Fix-: Create a implicit and an explicit Promise (Because it's not allowed by our definition)
+On Promise(Base) get the Future to set the value
+Will set the status to completed and the value can be received through Future.getResult()
+Important: If a ExplicitPromise is created the PromiseValue has to be called because else the promise will stay in blocked state
+-(Will be removed)Deprecated Problem-: What would happened if the function as well as implicit executes at the same time
+-(Will be removed)Fix-: Create a implicit and an explicit Promise (Because the problem is a state which shouldn't be allowed)
 */
 func (promise ExplicitPromise) PromiseValue(input interface{}) {
 	//Blocking until value is send
 	promise.LinkedFuture <- FutureResult{input, false}
 	//However the value should be read more than one time therefore we need to send the result more than one
 	//time to the channel. To prevent the blocking we need to use a goroutine
-	//Problematic: Possible Memory Leak
+	//Possible Problem: Memory Leak
 	go func() {
 		for {
 			promise.LinkedFuture <- FutureResult{input, false}
@@ -190,8 +181,7 @@ func (promise ExplicitPromise) PromiseValue(input interface{}) {
 	}()
 }
 
-// Get Future(ReturnValue) from Promise(Base)
-// Effects: Will return the future for the promise
+// Return the future for the promise
 func (promise ExplicitPromise) GetFuture() Future {
 	return promise.LinkedFuture
 }
@@ -199,8 +189,6 @@ func (promise ExplicitPromise) GetFuture() Future {
 // Promise - Optional Extension
 // _______________________________________________________________________________________________
 // Possible Extensions
-//                     - Add a cancel function (Macht Sinn) (bin zu dumm dafür) (Kontexte)
-// 					   - Get State to check if still processing (Test case)
-//
-//-> However is problematic because we don't know how expensive
-//   the calculation is -> So make it optional and let the user set the amount of time
+//                     - Add a cancel function using context (Recommended)
+// 					   - Get State to check if still processing (Test case) (Optional)
+

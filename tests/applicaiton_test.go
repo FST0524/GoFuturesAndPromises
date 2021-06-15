@@ -88,7 +88,7 @@ func TestExampleWebsite(t *testing.T) {
 		t.Error(err.Error())
 	}
 }
-
+//Testing Implicit Version
 //Failed Version
 func TestExampleWebsiteFailed(t *testing.T) {
 
@@ -105,7 +105,7 @@ func TestExampleWebsiteFailed(t *testing.T) {
 	}
 }
 
-//combined futures and promises
+//Combined Web and IO test
 func TestWebAndIO(t *testing.T) {
 	fmt.Print("Sending a HTTP Get Request to a website \n")
 	HTTPPromise := getRequest("https://www.youtube.com/")

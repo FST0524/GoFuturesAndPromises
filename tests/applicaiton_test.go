@@ -24,7 +24,7 @@ func TestImplicitImplementation(t *testing.T) {
 	if err == nil {
 		fmt.Printf("Received FutureResult Value: %d \n", x)
 	}else{
-		err.Error()
+		fmt.Print(err.Error())
 	}
 
 	if x != 5 {
@@ -65,8 +65,7 @@ func TestExplicitWithPromisingInThread(t *testing.T) {
 			t.Errorf("Wrong value %d was received but should have been 45.\n", x)
 		}
 	}else {
-		err.Error()
-		t.Errorf("Error occured during proccessing.\n")
+		t.Error(err.Error())
 	}
 
 }
@@ -86,7 +85,7 @@ func TestExampleWebsite(t *testing.T) {
 		request := result.(*http.Response)
 		fmt.Printf("Request Header: %s",request.Header)
 	}else{
-		err.Error()
+		t.Error(err.Error())
 	}
 }
 
@@ -134,24 +133,68 @@ func TestWebAndIO(t *testing.T) {
 // Test the GetResultWithTimeout function
 // The timeout wont happen
 func TestGetResultWithTimeout(t *testing.T) {
-
+	implicitPromise := getRequest("https://jsonlint.com/")
+	future := implicitPromise.GetFuture()
+	result, err := future.GetResultWithTimeout(5)
+	if err == nil{
+		request := result.(*http.Response)
+		fmt.Printf("Expected: Request Header: %s \n",request.Header)
+	}else{
+		t.Errorf("Unexpected: %s \n",err.Error())
+	}
 }
 // Test the GetResultWithTimeout function
 // The timeout will happen
 func TestGetResultWithOccurringTimeout(t *testing.T) {
-
+	implicitPromise := getRequest("https://jsonlint.com/")
+	future := implicitPromise.GetFuture()
+	_, err := future.GetResultWithTimeout(0)
+	if err == nil{
+		t.Error("Unexpected: Failed there should have been a timeout error \n")
+	}else{
+		fmt.Printf("Expected: %s",err.Error())
+	}
 }
 
 // Test the OnResolvedWithTimeout function
 // SuccessFunc should be executed
 func TestOnResolvedWithTimeoutSuccess(t *testing.T) {
-
+	implicitPromise := getRequest("https://jsonlint.com/")
+	future := implicitPromise.GetFuture()
+	future.OnResolvedWithTimeout(func() {
+		t.Errorf("Unexpected: Error occurred!")
+	},
+	func(i interface{}) {
+		fmt.Print("Value received: \n", i)
+	},
+	5)
 }
 
 // Test the OnResolvedWithTimeout function
 // ErrorFunc should be executed
 func TestOnResolvedWithTimeoutError(t *testing.T) {
+	implicitPromise := getRequest("https://jsonlint.com/")
+	future := implicitPromise.GetFuture()
+	future.OnResolvedWithTimeout(func() {
+		fmt.Print("Expected: ErrorFunc is executing")
+	},
+	func(i interface{}) {
+		fmt.Printf("Unexpected: No timeout occurred and value %d received.\n", i)
+	},
+	0)
+}
 
+// --Experimental-- Test
+// This test is trying to prove whether there is a memory leak due to the for loops which may be preventing garbage collection
+// MakeImplicitPromise and PromiseValue are effected
+// Go Profiler will be used to analyze the result
+func TestMemoryLeak(t *testing.T) {
+	var y [1000]ImplicitPromise
+	for i := 0; i < 1000; i++ {
+		y[i] = simpleTestFunction(i)
+		time.Sleep(10*time.Millisecond)
+	}
+	fmt.Println(y[999].GetFuture().GetResult())
 }
 
 //_______________________________________________________________________________________________
@@ -206,10 +249,20 @@ func readIO(resp *http.Response) ImplicitPromise {
 		bytes, err := io.ReadAll(resp.Body)
 		if err == nil {
 			resp.Body.Close()
-			return FutureResult{bytes, false}
+			return FutureResult{ValueOrError: bytes, IsError: false}
 		} else{
-			return FutureResult{err, true}
+			return FutureResult{ValueOrError: err, IsError: true}
 		}
 
+	})
+}
+
+func simpleTestFunction(value int)  ImplicitPromise {
+	return MakeImplicitPromise(func() FutureResult {
+		if value < 10 {
+			return FutureResult{ValueOrError: value, IsError: false}
+		} else {
+			return FutureResult{ValueOrError: PromiseError{Reason: "Input for simpleFunction has to be smaller than 10.\n"}, IsError: true}
+		}
 	})
 }

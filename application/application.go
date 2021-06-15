@@ -23,16 +23,17 @@ type FutureResult struct {
 	IsError bool
 }
 
-type error interface {
-	Error() string
-}
-
-type TimeoutError struct{
-
+type TimeoutError struct{}
+type PromiseError struct{
+	Reason string
 }
 
 func (e TimeoutError) Error() string {
-	return fmt.Sprintf("Timeout error occured.")
+	return "Timeout error occurred.\n"
+}
+
+func (e PromiseError) Error() string {
+	return fmt.Sprintf("The promise was broken.\n Reason: %s ",e.Reason)
 }
 
 // Future
@@ -64,7 +65,7 @@ func (future Future) GetResult() (interface{},error) {
 func (future Future) GetResultWithTimeout(seconds int) (interface{},error)  {
 	select {
 	case futResult := <-future:
-		if futResult.ValueOrError == false {
+		if futResult.IsError == false {
 			return futResult.ValueOrError, nil
 		} else {
 			return nil, futResult.ValueOrError.(error)
@@ -134,6 +135,7 @@ type ImplicitPromise Promise
 // Implicit means that the calculation will be starting without a trigger
 func MakeImplicitPromise(calcFunction func() FutureResult) ImplicitPromise {
 	//Closure used here
+	//It's possible to make the func easier with directly returning the future
 	promise := ImplicitPromise{LinkedFuture: make(Future)}
 	go func() {
 		ret := calcFunction()
@@ -180,7 +182,6 @@ func (promise ExplicitPromise) PromiseValue(input interface{}) {
 	promise.LinkedFuture <- FutureResult{input, false}
 	//However the value should be read more than one time therefore we need to send the result more than one
 	//time to the channel. To prevent the blocking we need to use a goroutine
-
 	//Problematic: Possible Memory Leak
 	go func() {
 		for {

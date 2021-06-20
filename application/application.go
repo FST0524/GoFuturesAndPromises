@@ -101,11 +101,6 @@ func (future Future) OnResolvedWithTimeout(errorFunc func(),successFunc func(i i
 }
 
 // Promise
-// -Task-: 1 Promise erstellt den Future
-// -Task-: 2 Promise implizit
-// -Task-: 2 Promise explizit
-// -Task-: 3 Promise hat die Funktion getFuture um eine Instanz des Futures zu setzen
-// -Task-: 4 Promise hat eine Funktion setValue, um den Wert des Futures zu setzen, dadurch wird er automatisch in den Zustand completed gesetzt und ist erfüllt
 //_______________________________________________________________________________________________
 
 // Keep every promise bound to their own future
@@ -165,8 +160,6 @@ func MakeExplicitPromise() ExplicitPromise {
 On Promise(Base) get the Future to set the value
 Will set the status to completed and the value can be received through Future.getResult()
 Important: If a ExplicitPromise is created the PromiseValue has to be called because else the promise will stay in blocked state
--(Will be removed)Deprecated Problem-: What would happened if the function as well as implicit executes at the same time
--(Will be removed)Fix-: Create a implicit and an explicit Promise (Because the problem is a state which shouldn't be allowed)
 */
 func (promise ExplicitPromise) PromiseValue(input interface{}) {
 	//Blocking until value is send
@@ -190,5 +183,5 @@ func (promise ExplicitPromise) GetFuture() Future {
 // _______________________________________________________________________________________________
 // Possible Extensions
 //                     - Add a cancel function using context (Recommended)
-// 					   - Get State to check if still processing (Test case) (Optional)
+// 		       - Get State to check if still processing (Test case) (Optional)
 
